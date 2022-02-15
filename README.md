@@ -8,7 +8,7 @@ This repository contains the AWS CloudFormation template to provision the prereq
 - 1 public subnet
 - Internet gateway, NAT gateway and related routes
 
-This template uses an AWS Lambda function to ensure the subnets are created in an avaliability zone supported by AppStream 2.0. For supported Avaliablity Zones, refer to the [Amazon WorkSpaces Administration Guide](https://docs.aws.amazon.com/workspaces/latest/adminguide/azs-workspaces.html).
+This template uses an AWS Lambda function to ensure the subnets are created in an avaliability zone supported by Workspaces. For supported Avaliablity Zones, refer to the [Amazon WorkSpaces Administration Guide](https://docs.aws.amazon.com/workspaces/latest/adminguide/azs-workspaces.html).
 
 ## Instructions
 1. Navigate to the AWS CloudFormation console.
