@@ -1,0 +1,262 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  VPC WorkSpaces Lab VPC Infrastructure one public and two private subnets
+  template. The lambda custom resource will return the AZ (Zone Name) based on the Zone ID
+  in the RegionMap. This ensures that WorkSpaces can be deployed to both private subnets provisioned.
+
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: VPC Parameters
+        Parameters:
+          - Octet
+
+# By using this parameter, we can have multiple users share a lab account.
+Parameters:
+  Octet:
+    Description: 2nd Octet (10.XXX.0.0/16)
+    Type: Number
+    Default: 0
+    ConstraintDescription: Entry must fall between 0 and 255
+    MinValue: 0
+    MaxValue: 255
+
+# Amazon WorkSpaces is available in a subset of the Availability Zones for each supported Region.
+# https://docs.aws.amazon.com/workspaces/latest/adminguide/azs-workspaces.html
+Mappings:
+  RegionMap:
+    us-east-1:
+      az1: use1-az2
+      az2: use1-az4
+      az3: use1-az6
+    us-west-2:
+      az1: usw2-az1
+      az2: usw2-az2
+      az3: usw2-az3
+    ap-south-1:
+      az1: aps1-az1
+      az2: aps1-az2
+      az3: aps1-az3
+    ap-northeast-2:
+      az1: apne2-az1
+      az2: apne2-az3
+    ap-southeast-1:
+      az1: apse1-az1
+      az2: apse1-az2
+    ap-southeast-2:
+      az1: apse2-az1
+      az2: apse2-az3
+    ap-northeast-1:
+      az1: apne1-az1
+      az2: apne1-az4
+    ca-central-1:
+      az1: cac1-az1
+      az2: cac1-az2
+    eu-central-1:
+      az1: euc1-az2
+      az2: euc1-az3
+    eu-west-1:
+      az1: euw1-az1
+      az2: euw1-az2
+    eu-west-2:
+      az1: euw2-az2
+      az2: euw2-az3
+    sa-east-1:
+      az1: sae1-az1
+      az2: sae1-az3
+
+Resources:
+  iamLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "The Amazon EC2 ec2:Describe* API actions do not support resource-level permissions" 
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: describe-ec2-az
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeAvailabilityZones'
+                Resource: '*'
+      MaxSessionDuration: 3600
+      Path: /service-role/
+
+  fnZoneIdtoZoneName:
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This function is used to determine which AZs to deploy the subnets in."
+          - id: W92
+            reason: "This function only runs twice to select private subnets." 
+    Properties:
+      Runtime: python3.8
+      Handler: index.lambda_handler
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+
+          def zoneId_to_zoneName(event, context):
+              responseData = {}
+              ec2 = boto3.client('ec2')
+              describe_az = ec2.describe_availability_zones()
+              for az in describe_az['AvailabilityZones']:
+                  if event['ResourceProperties']['ZoneId'] == az['ZoneId']:
+                      responseData['ZoneName'] = az['ZoneName']
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, str(az['ZoneId']))
+                      
+          def no_op(event, context):
+              print(event)
+              responseData = {}
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, str(event['RequestId']))
+
+          def lambda_handler(event, context):
+              if event['RequestType'] == ('Create' or 'Update'):
+                  zoneId_to_zoneName(event, context)
+              else:
+                  no_op(event,context)
+      Role: !GetAtt iamLambdaExecutionRole.Arn
+
+  getAZ1:
+    Type: "Custom::zone-id-zone-name"
+    Properties:
+      ServiceToken: !GetAtt fnZoneIdtoZoneName.Arn
+      ZoneId: !FindInMap [ RegionMap, !Ref 'AWS::Region', az1 ]
+  getAZ2:
+    Type: "Custom::zone-id-zone-name"
+    Properties:
+      ServiceToken: !GetAtt fnZoneIdtoZoneName.Arn
+      ZoneId: !FindInMap [ RegionMap, !Ref 'AWS::Region', az2 ]
+
+  WorkSpacesLabVPC:
+    Type: 'AWS::EC2::VPC'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W60
+            reason: "For the purposes of this workshop, VPC flow logs are not enabled" 
+    Properties:
+      CidrBlock: !Sub '10.${Octet}.0.0/16'
+      Tags:
+        - Key: Name
+          Value: WorkSpaces VPC
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref WorkSpacesLabVPC
+      AvailabilityZone: !GetAtt getAZ1.ZoneName
+      CidrBlock: !Sub '10.${Octet}.0.0/24'
+      Tags:
+        - Key: Name
+          Value: WorkSpaces Public Subnet
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref WorkSpacesLabVPC
+      AvailabilityZone: !GetAtt getAZ1.ZoneName
+      CidrBlock: !Sub '10.${Octet}.1.0/24'
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: WorkSpaces Private Subnet1
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref WorkSpacesLabVPC
+      AvailabilityZone: !GetAtt getAZ2.ZoneName
+      CidrBlock: !Sub '10.${Octet}.2.0/24'
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: WorkSpaces Private Subnet2
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: WorkSpaces IGW
+        - Key: Network
+          Value: Public
+  GatewayToInternet:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref WorkSpacesLabVPC
+      InternetGatewayId: !Ref InternetGateway
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref WorkSpacesLabVPC
+      Tags:
+        - Key: Network
+          Value: Public
+        - Key: Name
+          Value: WorkSpaces Public Route Table
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  NatGateway:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt NatPublicIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: WorkSpaces NatGateway
+  NatPublicIP:
+    Type: 'AWS::EC2::EIP'
+    DependsOn: WorkSpacesLabVPC
+    Properties:
+      Domain: vpc
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref WorkSpacesLabVPC
+      Tags:
+        - Key: Network
+          Value: Private
+        - Key: Name
+          Value: WorkSpaces Private Route Table
+  PrivateRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  PrivateSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
