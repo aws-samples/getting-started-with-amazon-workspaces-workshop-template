@@ -27,6 +27,10 @@ Once your stack is created, you can start your workshop.
 ## Clean up
 You can clean up the resources created by deleting the AWS CloudFormation template. For clean up of the workshop resources, refer to the [clean up section of the workshop](https://catalog.us-east-1.prod.workshops.aws/v2/workshops/ba8389fd-99a1-4010-a95e-d691a2c08311/en-US/cleanup).
 
+1. Navigate to the AWS CloudFormation console.
+2. Choose the Workspaces-Workshop stack
+3. Choose Delete.
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
