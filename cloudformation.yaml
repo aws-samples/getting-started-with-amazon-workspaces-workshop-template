@@ -260,3 +260,32 @@ Resources:
     Properties:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
+
+  ADAdminSecret:
+    Type: AWS::SecretsManager::Secret
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W77
+            reason: For this workshop we will not specify the KMS key explicitly.
+    Properties:
+      Name: "ADAdminSecret"
+      Description: "Password for directory services admin"
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "Admin"}'
+        GenerateStringKey: password
+        PasswordLength: 30
+        ExcludeCharacters: '"@/\'
+
+  ManagedAD:
+    Type: AWS::DirectoryService::MicrosoftAD
+    Properties:
+      Edition: Standard
+      Name: workspaces.labx.com
+      Password: '{{resolve:secretsmanager:ADAdminSecret:SecretString:password}}'
+      ShortName: workspaces
+      VpcSettings:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        VpcId: !Ref WorkSpacesLabVPC
