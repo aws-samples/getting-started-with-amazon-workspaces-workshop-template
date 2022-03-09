@@ -1,7 +1,6 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  VPC WorkSpaces Lab VPC Infrastructure one public and two private subnets
-  template. The lambda custom resource will return the AZ (Zone Name) based on the Zone ID
+  VPC WorkSpaces Lab VPC infrastructure and managed directory services. The lambda custom resource will return the AZ (Zone Name) based on the Zone ID
   in the RegionMap. This ensures that WorkSpaces can be deployed to both private subnets provisioned.
 
 Metadata:

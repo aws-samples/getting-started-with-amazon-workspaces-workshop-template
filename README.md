@@ -7,6 +7,8 @@ This repository contains the AWS CloudFormation template to provision the prereq
 - 2 private subnets
 - 1 public subnet
 - Internet gateway, NAT gateway and related routes
+- Secret in Secrets Manager
+- AWS Directory Service for Microsoft Active Directory
 
 This template uses an AWS Lambda function to ensure the subnets are created in an Availability Zone supported by WorkSpaces. For supported Availability Zones, refer to the [Amazon WorkSpaces Administration Guide](https://docs.aws.amazon.com/workspaces/latest/adminguide/azs-workspaces.html).
 
